@@ -1,0 +1,30 @@
+# Grafana (chart oficial grafana/grafana) da plataforma.
+# Fontes de dados: vêm do chart lgtm (sidecar). Dashboards: cada projeto envia os seus pela API.
+service:
+  type: NodePort
+  nodePort: 30300
+
+grafana.ini:
+  auth.anonymous: # só local
+    enabled: true
+    org_role: Admin
+  auth:
+    disable_login_form: true
+
+sidecar:
+  datasources:
+    enabled: true
+    label: grafana_datasource
+  dashboards:
+    enabled: false
+
+persistence:
+  enabled: true
+  size: 1Gi
+
+resources:
+  requests: { cpu: 50m, memory: 128Mi }
+  limits: { memory: 512Mi }
+
+testFramework:
+  enabled: false

@@ -1,0 +1,63 @@
+{{- $config := include "lgtm.tempoConfig" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  labels: {{- include "lgtm.labels" . | nindent 4 }}
+data:
+  tempo.yaml: |
+    {{- $config | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  labels: {{- include "lgtm.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: tempo
+  ports:
+    - name: http
+      port: 3200
+      targetPort: http
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+---
+{{ include "lgtm.monolito" (dict
+    "root" .
+    "nome" "tempo"
+    "imagem" .Values.imagens.tempo
+    "args" (list "-config.file=/etc/tempo/tempo.yaml")
+    "portas" (list (dict "nome" "http" "porta" 3200) (dict "nome" "otlp-grpc" "porta" 4317))
+    "montagemDados" "/var/tempo"
+    "recursos" .Values.recursos.tempo
+    "checksum" ($config | sha256sum)) }}
+
+{{- define "lgtm.tempoConfig" -}}
+# Tempo monolítico e MULTI-TENANT.
+multitenancy_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    block_retention: {{ .Values.retencao.traces }}
+{{- end }}

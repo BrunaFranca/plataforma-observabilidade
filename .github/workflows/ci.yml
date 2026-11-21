@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+      - run: helm lint charts/lgtm
+      - name: Manifestos válidos para o Kubernetes (kubeconform)
+        run: |
+          helm template lgtm charts/lgtm -n observabilidade > /tmp/lgtm.yaml
+          docker run --rm -v /tmp:/t ghcr.io/yannh/kubeconform:v0.7.0 -strict -summary /t/lgtm.yaml
+      - run: bash -n scripts/*.sh
+
+  # Sobe a plataforma de verdade num cluster kind dentro do Actions e prova o isolamento entre tenants.
+  ponta-a-ponta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: validar
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: obs
+          config: kind/obs.yaml
+      - run: bash scripts/subir.sh
+      - run: bash scripts/teste-tenants.sh
+      - name: Diagnóstico (se falhar)
+        if: failure()
+        run: kubectl -n observabilidade get pods -o wide && kubectl -n observabilidade logs -l app.kubernetes.io/name=gateway --tail=50

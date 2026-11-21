@@ -1,0 +1,120 @@
+{{- $config := include "lgtm.mimirConfig" . -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-config
+  labels: {{- include "lgtm.labels" . | nindent 4 }}
+data:
+  mimir.yaml: |
+    {{- $config | nindent 4 }}
+  alertmanager.yaml: |
+    # Alertas aparecem no Grafana/Alertmanager, sem notificar ninguém (por enquanto).
+    route:
+      receiver: ninguem
+      group_by: [alertname, slo]
+    receivers:
+      - name: ninguem
+---
+# Interno (outros componentes do cluster) e externo (NodePort: outros clusters mandam remote write e regras).
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir
+  labels: {{- include "lgtm.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: mimir
+  ports:
+    - name: http
+      port: 9009
+      targetPort: http
+      nodePort: {{ .Values.nodePorts.mimir }}
+---
+{{ include "lgtm.monolito" (dict
+    "root" .
+    "nome" "mimir"
+    "imagem" .Values.imagens.mimir
+    "args" (list "-config.file=/etc/mimir/mimir.yaml")
+    "portas" (list (dict "nome" "http" "porta" 9009))
+    "montagemDados" "/data"
+    "recursos" .Values.recursos.mimir
+    "checksum" ($config | sha256sum)) }}
+
+{{- define "lgtm.mimirConfig" -}}
+# Mimir monolítico e MULTI-TENANT: cada projeto manda o cabeçalho X-Scope-OrgID e só vê os próprios dados.
+target: all,alertmanager
+multitenancy_enabled: true
+
+server:
+  http_listen_port: 9009
+  log_level: warn
+
+# O contêiner tem sistema de arquivos somente leitura: arquivos de trabalho vão para o volume.
+activity_tracker:
+  filepath: /data/metrics-activity.log
+
+common:
+  storage:
+    backend: filesystem
+    filesystem:
+      dir: /data/blocos
+
+blocks_storage:
+  tsdb:
+    dir: /data/tsdb
+  bucket_store:
+    sync_dir: /data/tsdb-sync
+
+ingester:
+  ring:
+    replication_factor: 1
+    instance_addr: 127.0.0.1
+    kvstore: { store: inmemory }
+distributor:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore: { store: inmemory }
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
+    instance_addr: 127.0.0.1
+    kvstore: { store: inmemory }
+compactor:
+  data_dir: /data/compactor
+  sharding_ring:
+    instance_addr: 127.0.0.1
+    kvstore: { store: inmemory }
+
+# Regras (SLOs) gravadas pela API do ruler: cada projeto envia as suas (mimirtool rules sync).
+ruler_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/regras
+ruler:
+  rule_path: /data/ruler
+  alertmanager_url: http://localhost:9009/alertmanager
+  evaluation_interval: 30s
+  enable_api: true
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore: { store: inmemory }
+
+alertmanager:
+  data_dir: /data/am-estado
+  fallback_config_file: /etc/mimir/alertmanager.yaml
+  external_url: http://localhost:9009/alertmanager
+  sharding_ring:
+    instance_addr: 127.0.0.1
+    replication_factor: 1
+    kvstore: { store: inmemory }
+alertmanager_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/am-config
+
+limits:
+  max_global_exemplars_per_user: 100000
+  compactor_blocks_retention_period: {{ .Values.retencao.metricas }}
+  otel_metric_suffixes_enabled: true
+{{- end }}

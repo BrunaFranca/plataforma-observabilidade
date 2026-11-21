@@ -1,0 +1,57 @@
+# Fontes de dados do Grafana, uma trinca (Mimir, Loki, Tempo) por tenant.
+# O sidecar do Grafana lê ConfigMaps com o label grafana_datasource.
+# uids: mimir-<tenant>, loki-<tenant>, tempo-<tenant> (os dashboards de cada projeto usam esses uids).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-fontes
+  labels:
+    {{- include "lgtm.labels" . | nindent 4 }}
+    grafana_datasource: "1"
+data:
+  fontes.yaml: |
+    apiVersion: 1
+    datasources:
+    {{- range .Values.tenants }}
+      - name: Mimir · {{ . }}
+        uid: mimir-{{ . }}
+        type: prometheus
+        url: http://mimir.{{ $.Release.Namespace }}:9009/prometheus
+        jsonData:
+          prometheusType: Mimir
+          manageAlerts: true
+          httpHeaderName1: X-Scope-OrgID
+          exemplarTraceIdDestinations:
+            - { name: trace_id, datasourceUid: tempo-{{ . }} }
+        secureJsonData:
+          httpHeaderValue1: {{ . }}
+      - name: Alertmanager · {{ . }}
+        uid: alertmanager-{{ . }}
+        type: alertmanager
+        url: http://mimir.{{ $.Release.Namespace }}:9009/alertmanager
+        jsonData:
+          implementation: mimir
+          httpHeaderName1: X-Scope-OrgID
+        secureJsonData:
+          httpHeaderValue1: {{ . }}
+      - name: Tempo · {{ . }}
+        uid: tempo-{{ . }}
+        type: tempo
+        url: http://tempo.{{ $.Release.Namespace }}:3200
+        jsonData:
+          httpHeaderName1: X-Scope-OrgID
+          tracesToLogsV2: { datasourceUid: loki-{{ . }}, filterByTraceID: true, spanStartTimeShift: -5m, spanEndTimeShift: 5m }
+          tracesToMetrics: { datasourceUid: mimir-{{ . }} }
+        secureJsonData:
+          httpHeaderValue1: {{ . }}
+      - name: Loki · {{ . }}
+        uid: loki-{{ . }}
+        type: loki
+        url: http://loki.{{ $.Release.Namespace }}:3100
+        jsonData:
+          httpHeaderName1: X-Scope-OrgID
+          derivedFields:
+            - { name: trace_id, matcherType: label, matcherRegex: trace_id, url: "$${__value.raw}", datasourceUid: tempo-{{ . }} }
+        secureJsonData:
+          httpHeaderValue1: {{ . }}
+    {{- end }}

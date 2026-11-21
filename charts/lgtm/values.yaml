@@ -1,0 +1,28 @@
+# Projetos (tenants) que usam a plataforma. Cada um ganha, no Grafana, as fontes de dados
+# "<Sinal> · <tenant>" e só enxerga os próprios dados (cabeçalho X-Scope-OrgID).
+tenants:
+  - vida-da-bruna
+
+imagens:
+  mimir: grafana/mimir:2.16.0
+  loki: grafana/loki:3.5.1
+  tempo: grafana/tempo:2.8.1
+  gateway: otel/opentelemetry-collector-contrib:0.129.1
+
+armazenamento: 2Gi # por componente (local-path do kind)
+
+retencao:
+  metricas: 35d # um pouco mais que a janela de 30 dias dos SLOs
+  logs: 168h
+  traces: 168h
+
+# Portas fixas (NodePort) por onde os outros clusters entram.
+nodePorts:
+  gateway: 30317
+  mimir: 30909
+
+recursos:
+  mimir: { requests: { cpu: 100m, memory: 256Mi }, limits: { memory: 1Gi } }
+  loki: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
+  tempo: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 512Mi } }
+  gateway: { requests: { cpu: 50m, memory: 64Mi }, limits: { memory: 256Mi } }

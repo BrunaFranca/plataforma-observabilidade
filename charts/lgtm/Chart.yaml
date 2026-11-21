@@ -1,0 +1,6 @@
+apiVersion: v2
+name: lgtm
+description: Plataforma de observabilidade multi-tenant (Mimir, Loki, Tempo e um gateway OTLP), em modo monolítico, para laboratório.
+type: application
+version: 0.1.0
+appVersion: "lgtm"
