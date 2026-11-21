@@ -16,4 +16,4 @@ bash scripts/teste-tenants.sh  # prova o isolamento entre tenants
 # Grafana: http://localhost:3300
 ```
 
-Decisões em [docs/adr](docs/adr). Primeiro projeto a usar: [vida-da-bruna-api](https://github.com/BrunaFranca/vida-da-bruna-api).
+Decisões em [docs/adr](docs/adr). Primeiro projeto a usar: [vida-da-bruna-api](https://github.com/BrunaFranca/vida-da-bruna-api), que tem o diagrama completo da arquitetura e os resultados dos game days.
